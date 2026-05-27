@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="/tmp/money4band"
 BIN_DIR="${ROOT_DIR}/bin"
 AMD64_URL="https://github.com/alphanetai/money4band/releases/download/binary/money4band-linux-amd64"
 
@@ -51,6 +51,7 @@ download_binary() {
 }
 
 main() {
+  mkdir -p "${ROOT_DIR}"
   info "Starting setup..."
   install_docker_if_missing
   ensure_docker_running
