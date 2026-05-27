@@ -58,7 +58,7 @@ main() {
   local bin
   bin="$(download_binary)"
   info "Launching Money4Band..."
-  if "${bin}"; then
+  if "${bin}" --autopilot-services; then
     echo "[STATUS] OK - Money4Band launched successfully" >&2
   else
     code=$?
