@@ -74,7 +74,7 @@ def create_docker_group_if_needed():
         raise RuntimeError("Failed to add user to Docker group.") from e
 
 
-def run_docker_command(command, use_sudo=False):
+def run_docker_command(command, use_sudo=False, env=None):
     """
     Run a Docker command, optionally using sudo, and handle errors gracefully.
 
@@ -91,7 +91,9 @@ def run_docker_command(command, use_sudo=False):
     logging.info(f"Running command: {' '.join(command)}")
 
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        result = subprocess.run(
+            command, capture_output=True, text=True, check=False, env=env
+        )
         if result.returncode == 0:
             logging.info(result.stdout)
         else:

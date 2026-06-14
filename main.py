@@ -272,16 +272,34 @@ def main():
 
     if args.autopilot_services:
         from utils import generator, fn_startStack
-        generator.main(
-            app_config_path=os.path.join(args.config_dir, args.config_app_file),
-            m4b_config_path=os.path.join(args.config_dir, args.config_m4b_file),
-            user_config_path=user_config_path,
+        app_config_path = os.path.join(args.config_dir, args.config_app_file)
+        m4b_config_path = os.path.join(args.config_dir, args.config_m4b_file)
+
+        runtime_env_path = os.path.join(RUNTIME_DIR, ".env")
+        if getattr(sys, "frozen", False) and os.path.exists(runtime_env_path):
+            os.remove(runtime_env_path)
+
+        generator.assemble_docker_compose(
+            app_config_path_or_dict=app_config_path,
+            m4b_config_path_or_dict=m4b_config_path,
+            user_config_path_or_dict=user_config_path,
+            compose_output_path=os.path.join(RUNTIME_DIR, "docker-compose.yaml"),
+            is_main_instance=True,
+        )
+        env_vars = generator.generate_env_vars(
+            app_config_path_or_dict=app_config_path,
+            m4b_config_path_or_dict=m4b_config_path,
+            user_config_path_or_dict=user_config_path,
+            is_main_instance=True,
         )
         started = fn_startStack.main(
-            app_config_path=os.path.join(args.config_dir, args.config_app_file),
-            m4b_config_path=os.path.join(args.config_dir, args.config_m4b_file),
+            app_config_path=app_config_path,
+            m4b_config_path=m4b_config_path,
             user_config_path=user_config_path,
+            env_vars=env_vars,
         )
+        if getattr(sys, "frozen", False) and os.path.exists(runtime_env_path):
+            os.remove(runtime_env_path)
         if not started:
             sys.exit(1)
     else:

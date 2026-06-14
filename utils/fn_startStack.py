@@ -96,11 +96,36 @@ def get_device_name_from_env(env_file: str) -> str:
     return device_name
 
 
+def get_container_names_from_device(device_name: str) -> list[str]:
+    app_names = [
+        "earnapp",
+        "iproyalpawns",
+        "packetstream",
+        "traffmonetizer",
+        "repocket",
+        "earnfm",
+        "proxyrack",
+        "bitping",
+        "packetshare",
+        "grass",
+        "gradient",
+        "dawn",
+        "teneo",
+        "mystnode",
+        "peer2profit",
+        "watchtower",
+        "m4bwebdashboard",
+        "tun2socks",
+    ]
+    return [f"{device_name}_{app}" for app in app_names]
+
+
 def start_stack(
     compose_file: str = "./docker-compose.yaml",
     env_file: str = "./.env",
     instance_name: str = "money4band",
     skip_questions: bool = True,
+    env_vars: dict[str, str] | None = None,
 ) -> bool:
     """
     Start the Docker Compose stack using the provided compose and env files.
@@ -134,11 +159,22 @@ def start_stack(
     )
     spinner_thread.start()
 
-    use_sudo = not is_user_root() and platform.system().lower() == "linux"
+    use_sudo = (
+        not is_user_root()
+        and platform.system().lower() == "linux"
+        and not is_user_in_docker_group()
+    )
     try:
-        # Read COMPOSE_PROJECT_NAME from the .env file
-        project_name = get_compose_project_name(env_file)
-        device_name = get_device_name_from_env(env_file)
+        if env_vars is None:
+            # Read COMPOSE_PROJECT_NAME from the .env file
+            project_name = get_compose_project_name(env_file)
+            device_name = get_device_name_from_env(env_file)
+            command_env = None
+        else:
+            project_name = env_vars.get("COMPOSE_PROJECT_NAME")
+            device_name = env_vars.get("DEVICE_NAME")
+            command_env = os.environ.copy()
+            command_env.update(env_vars)
 
         if device_name:
             logging.info(
@@ -158,11 +194,26 @@ def start_stack(
                 f"COMPOSE_PROJECT_NAME not found in {env_file}, relying on Docker Compose defaults"
             )
 
-        command.extend(
-            ["-f", compose_file, "--env-file", env_file, "up", "-d", "--remove-orphans"]
-        )
+        if env_vars is None:
+            command.extend(
+                [
+                    "-f",
+                    compose_file,
+                    "--env-file",
+                    env_file,
+                    "up",
+                    "-d",
+                    "--remove-orphans",
+                ]
+            )
+        else:
+            command.extend(["-f", compose_file, "up", "-d", "--remove-orphans"])
+            if use_sudo:
+                preserved = ",".join(sorted(env_vars.keys()))
+                command = ["sudo", f"--preserve-env={preserved}", *command]
+                use_sudo = False
 
-        result = run_docker_command(command, use_sudo=use_sudo)
+        result = run_docker_command(command, use_sudo=use_sudo, env=command_env)
         if result == 0:
             print(
                 f"{Fore.GREEN}All Apps for '{instance_name}' instance started.{Style.RESET_ALL}"
@@ -196,6 +247,7 @@ def start_all_stacks(
     instances_dir: str = "m4b_proxy_instances",
     skip_questions: bool = True,
     force_clean: bool = False,
+    main_env_vars: dict[str, str] | None = None,
 ) -> bool:
     """
     Start the main stack and all multi-proxy instances.
@@ -263,18 +315,26 @@ def start_all_stacks(
 
         # Check main instance container names
         main_device_name = None
-        with open(main_env_file) as f:
-            for line in f:
-                if line.startswith("DEVICE_NAME="):
-                    main_device_name = line.strip().split("=", 1)[1]
-                    device_names.add(main_device_name)
-                    break
+        if main_env_vars is None:
+            with open(main_env_file) as f:
+                for line in f:
+                    if line.startswith("DEVICE_NAME="):
+                        main_device_name = line.strip().split("=", 1)[1]
+                        device_names.add(main_device_name)
+                        break
+        else:
+            main_device_name = main_env_vars.get("DEVICE_NAME")
+            if main_device_name:
+                device_names.add(main_device_name)
 
         if main_device_name:
             print(
                 f"{Fore.CYAN}Main instance device name: {main_device_name}{Style.RESET_ALL}"
             )
-            main_containers = get_container_names_from_env(main_env_file)
+            if main_env_vars is None:
+                main_containers = get_container_names_from_env(main_env_file)
+            else:
+                main_containers = get_container_names_from_device(main_device_name)
             for container in main_containers:
                 container_names[container] = "main instance"
 
@@ -343,7 +403,11 @@ def start_all_stacks(
 
         # Start main stack
         all_started = start_stack(
-            main_compose_file, main_env_file, main_instance_name, skip_questions=True
+            main_compose_file,
+            main_env_file,
+            main_instance_name,
+            skip_questions=True,
+            env_vars=main_env_vars,
         )
 
         # Wait a moment for main stack to initialize
@@ -374,7 +438,14 @@ def start_all_stacks(
                         logging.error(f"Error starting instance '{instance}': {str(e)}")
 
         if all_started:
-            generate_dashboard_urls(None, None, main_env_file)
+            if main_env_vars is None:
+                generate_dashboard_urls(None, None, main_env_file)
+            else:
+                generate_dashboard_urls(
+                    main_env_vars.get("COMPOSE_PROJECT_NAME"),
+                    main_env_vars.get("DEVICE_NAME"),
+                    main_env_file,
+                )
             print(
                 f"{Fore.YELLOW}Use the previously generated apps nodes URLs to add your device in any apps dashboard that require node claiming/registration (e.g., Earnapp, ProxyRack, etc.){Style.RESET_ALL}"
             )
@@ -482,6 +553,7 @@ def main(
     m4b_config_path: str,
     user_config_path: str,
     skip_questions: bool = True,
+    env_vars: dict[str, str] | None = None,
 ) -> bool:
     try:
         m4b_config = loader.load_json_config(m4b_config_path)
@@ -491,7 +563,9 @@ def main(
         )
 
         # Check if required files exist before proceeding
-        required_files = ["./docker-compose.yaml", "./.env"]
+        required_files = ["./docker-compose.yaml"]
+        if env_vars is None:
+            required_files.append("./.env")
         missing = check_required_files(
             required_files,
             error_message="Cannot start the stack. The following required files are missing:",
@@ -501,7 +575,9 @@ def main(
             time.sleep(sleep_time)
             return False
 
-        return start_all_stacks(main_instance_name=base_instance_name)
+        return start_all_stacks(
+            main_instance_name=base_instance_name, main_env_vars=env_vars
+        )
     except FileNotFoundError as e:
         logging.error(f"File not found: {str(e)}")
         print(f"{Fore.RED}File not found: {str(e)}{Style.RESET_ALL}")

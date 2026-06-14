@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('config', 'config'), ('utils', 'utils'), ('template', 'template'), ('.resources', '.resources'), ('.env', '.')],
+    datas=[('config', 'config'), ('utils', 'utils'), ('template', 'template'), ('.resources', '.resources')],
     hiddenimports=['colorama', 'psutil', 'secrets', 'yaml', 'requests', 'threading', 'socket', 'subprocess', 'platform', 'getpass', 'stat', 'urllib.request', 'importlib.util', 'importlib.machinery'],
     hookspath=[],
     hooksconfig={},
