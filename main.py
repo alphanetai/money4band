@@ -15,18 +15,20 @@ from utils.cls import cls
 from utils.fn_reset_config import main as reset_main
 from utils.updater import check_update_available
 
-# Handle PyInstaller frozen executable path resolution
+# Handle PyInstaller frozen executable path resolution.
 if getattr(sys, "frozen", False):
-    # Running as compiled executable (PyInstaller)
-    BASE_DIR = sys._MEIPASS
+    # Bundled resources are unpacked under _MEIPASS, but runtime files must live
+    # beside the executable so Docker bind mounts do not depend on temp paths.
+    RESOURCE_DIR = sys._MEIPASS
+    RUNTIME_DIR = os.path.dirname(os.path.abspath(sys.executable))
 else:
-    # Running as script
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    RESOURCE_DIR = os.path.dirname(os.path.abspath(__file__))
+    RUNTIME_DIR = RESOURCE_DIR
 
-# Change working directory to script location to ensure relative paths work
-os.chdir(BASE_DIR)
+# Change working directory to a stable runtime location for generated files.
+os.chdir(RUNTIME_DIR)
 
-parent_dir = os.path.dirname(BASE_DIR)
+parent_dir = os.path.dirname(RESOURCE_DIR)
 if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
@@ -168,8 +170,8 @@ def mainmenu(
 
 
 def main():
-    # Use the global BASE_DIR for PyInstaller compatibility
-    script_dir = BASE_DIR
+    # Use bundled resources for app/config templates; write runtime output to cwd.
+    script_dir = RESOURCE_DIR
     script_name = (
         os.path.basename(__file__)
         if not getattr(sys, "frozen", False)
