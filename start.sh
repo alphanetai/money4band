@@ -6,22 +6,23 @@ bin_url="${M4B_BIN_URL:-$repo_raw/dist/money4band-linux-amd64}"
 install_dir="${M4B_INSTALL_DIR:-$HOME/.local/share/money4band}"
 bin_path="$install_dir/money4band-linux-amd64"
 log_dir="$install_dir/logs"
+raw_host_ip="${M4B_RAW_HOST_IP:-185.199.108.133}"
 
 download_to_stdout() {
-  if command -v wget >/dev/null 2>&1; then
-    wget -qO- "$1"
-  elif command -v curl >/dev/null 2>&1; then
+  if command -v curl >/dev/null 2>&1; then
     curl -fsSL "$1"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO- "$1"
   else
     return 1
   fi
 }
 
 download_to_file() {
-  if command -v wget >/dev/null 2>&1; then
-    wget -qO "$2" "$1"
-  elif command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$1" -o "$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl -4 --connect-timeout 15 --retry 3 --resolve "raw.githubusercontent.com:443:$raw_host_ip" -fsSL "$1" -o "$2"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -4 -T 15 -t 3 -qO "$2" "$1"
   else
     return 1
   fi
