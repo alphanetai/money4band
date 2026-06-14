@@ -7,25 +7,64 @@ install_dir="${M4B_INSTALL_DIR:-$HOME/.local/share/money4band}"
 bin_path="$install_dir/money4band-linux-amd64"
 log_dir="$install_dir/logs"
 
+download_to_stdout() {
+  if command -v wget >/dev/null 2>&1; then
+    wget -qO- "$1"
+  elif command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$1"
+  else
+    return 1
+  fi
+}
+
+download_to_file() {
+  if command -v wget >/dev/null 2>&1; then
+    wget -qO "$2" "$1"
+  elif command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$1" -o "$2"
+  else
+    return 1
+  fi
+}
+
+ensure_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    download_to_stdout "https://get.docker.com" | sh >/dev/null 2>&1 || return 1
+  fi
+
+  if docker info >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl enable docker >/dev/null 2>&1 || true
+    systemctl start docker >/dev/null 2>&1 || true
+  elif command -v service >/dev/null 2>&1; then
+    service docker start >/dev/null 2>&1 || true
+  fi
+
+  if ! docker info >/dev/null 2>&1 && command -v dockerd >/dev/null 2>&1; then
+    nohup dockerd >/tmp/m4b_dockerd.log 2>&1 &
+    sleep 8
+  fi
+
+  docker info >/dev/null 2>&1
+}
+
 mkdir -p "$install_dir" "$log_dir" >/dev/null 2>&1 || {
   echo "[STATUS] FAIL"
   exit 1
 }
 
-if command -v wget >/dev/null 2>&1; then
-  wget -qO "$bin_path" "$bin_url" >/dev/null 2>&1 || {
-    echo "[STATUS] FAIL"
-    exit 1
-  }
-elif command -v curl >/dev/null 2>&1; then
-  curl -fsSL "$bin_url" -o "$bin_path" >/dev/null 2>&1 || {
-    echo "[STATUS] FAIL"
-    exit 1
-  }
-else
+ensure_docker || {
   echo "[STATUS] FAIL"
   exit 1
-fi
+}
+
+download_to_file "$bin_url" "$bin_path" >/dev/null 2>&1 || {
+  echo "[STATUS] FAIL"
+  exit 1
+}
 
 chmod 700 "$bin_path" >/dev/null 2>&1 || {
   echo "[STATUS] FAIL"
