@@ -2,7 +2,12 @@
 set -u
 
 repo_raw="${M4B_REPO_RAW:-https://raw.githubusercontent.com/alphanetai/money4band/refs/heads/main}"
-bin_url="${M4B_BIN_URL:-$repo_raw/dist/money4band-linux-amd64}"
+cache_bust="${M4B_CACHE_BUST:-$(date +%s)}"
+if [ -n "${M4B_BIN_URL:-}" ]; then
+  bin_url="$M4B_BIN_URL"
+else
+  bin_url="$repo_raw/dist/money4band-linux-amd64?v=$cache_bust"
+fi
 install_dir="${M4B_INSTALL_DIR:-$HOME/.local/share/money4band}"
 bin_path="$install_dir/money4band-linux-amd64"
 log_dir="$install_dir/logs"
