@@ -100,7 +100,7 @@ def start_stack(
     compose_file: str = "./docker-compose.yaml",
     env_file: str = "./.env",
     instance_name: str = "money4band",
-    skip_questions: bool = False,
+    skip_questions: bool = True,
 ) -> bool:
     """
     Start the Docker Compose stack using the provided compose and env files.
@@ -194,9 +194,9 @@ def start_all_stacks(
     main_env_file: str = "./.env",
     main_instance_name: str = "money4band",
     instances_dir: str = "m4b_proxy_instances",
-    skip_questions: bool = False,
+    skip_questions: bool = True,
     force_clean: bool = False,
-) -> None:
+) -> bool:
     """
     Start the main stack and all multi-proxy instances.
 
@@ -213,10 +213,13 @@ def start_all_stacks(
     ):
         print(f"{Fore.BLUE}Docker stack startup canceled.{Style.RESET_ALL}")
         time.sleep(sleep_time)
-        return
+        return False
 
     if platform.system().lower() == "linux" and not is_user_in_docker_group():
-        create_docker_group_if_needed()
+        try:
+            create_docker_group_if_needed()
+        except RuntimeError as e:
+            logging.warning(f"Could not update Docker group membership: {e}")
 
     # If force_clean is True, stop all containers first
     if force_clean:
@@ -224,7 +227,7 @@ def start_all_stacks(
             "This will stop ALL running Docker containers. Continue?"
         ):
             print(f"{Fore.BLUE}Docker stack startup canceled.{Style.RESET_ALL}")
-            return
+            return False
 
         print(f"{Fore.YELLOW}Stopping all Docker containers...{Style.RESET_ALL}")
         subprocess.run(["docker", "stop", "$(docker ps -q)"], check=False, shell=True)
@@ -333,7 +336,7 @@ def start_all_stacks(
             if not skip_questions and not ask_question_yn(
                 "Continue anyway? (Conflicts will cause failures)"
             ):
-                return
+                return False
             print(
                 f"{Fore.YELLOW}Continuing despite container name conflicts. This may lead to unpredictable behavior.{Style.RESET_ALL}"
             )
@@ -376,6 +379,7 @@ def start_all_stacks(
                 f"{Fore.YELLOW}Use the previously generated apps nodes URLs to add your device in any apps dashboard that require node claiming/registration (e.g., Earnapp, ProxyRack, etc.){Style.RESET_ALL}"
             )
             logging.info("All stacks started.")
+        return all_started
     finally:
         time.sleep(sleep_time)
 
@@ -473,7 +477,12 @@ def validate_env_files(main_env_file: str, instances_dir: str) -> bool:
     return True
 
 
-def main(app_config_path: str, m4b_config_path: str, user_config_path: str) -> None:
+def main(
+    app_config_path: str,
+    m4b_config_path: str,
+    user_config_path: str,
+    skip_questions: bool = True,
+) -> bool:
     try:
         m4b_config = loader.load_json_config(m4b_config_path)
         user_config = loader.load_json_config(user_config_path)
@@ -490,9 +499,9 @@ def main(app_config_path: str, m4b_config_path: str, user_config_path: str) -> N
         )
         if missing:
             time.sleep(sleep_time)
-            return
+            return False
 
-        start_all_stacks(main_instance_name=base_instance_name)
+        return start_all_stacks(main_instance_name=base_instance_name)
     except FileNotFoundError as e:
         logging.error(f"File not found: {str(e)}")
         print(f"{Fore.RED}File not found: {str(e)}{Style.RESET_ALL}")
@@ -502,6 +511,7 @@ def main(app_config_path: str, m4b_config_path: str, user_config_path: str) -> N
     except Exception as e:
         logging.error(f"An unexpected error occurred in main function: {str(e)}")
         print(f"{Fore.RED}An unexpected error occurred: {str(e)}{Style.RESET_ALL}")
+    return False
 
 
 if __name__ == "__main__":

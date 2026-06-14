@@ -214,7 +214,8 @@ def assemble_docker_compose(
                                 )
                                 user_app_config["enabled"] = False
                                 user_config["apps"][app_name] = user_app_config
-                                write_json(user_config, user_config_path_or_dict)
+                                if isinstance(user_config_path_or_dict, str):
+                                    write_json(user_config, user_config_path_or_dict)
                                 logging.info(
                                     f"{app_name} has been disabled in user-config.json due to lack of compatible image tag."
                                 )
@@ -698,7 +699,7 @@ def main(app_config_path: str, m4b_config_path: str, user_config_path: str) -> N
     if not os.path.exists(user_config_path):
         print(f"{Fore.RED}Error: User config not found.{Style.RESET_ALL}")
         print("Please run 'Setup Apps' first to create the initial configuration.")
-        input("\nPress Enter to go back to main menu...")
+        pass  # autopilot: skip prompt
         return
 
     try:
@@ -707,7 +708,7 @@ def main(app_config_path: str, m4b_config_path: str, user_config_path: str) -> N
         user_config = load_json_config(user_config_path)
     except Exception as e:
         print(f"{Fore.RED}Error loading config files: {e}{Style.RESET_ALL}")
-        input("\nPress Enter to go back to main menu...")
+        pass  # autopilot: skip prompt
         return
 
     # Show summary
@@ -765,9 +766,9 @@ def main(app_config_path: str, m4b_config_path: str, user_config_path: str) -> N
         pass  # Docker check failed, continue anyway
 
     print()
-    if not ask_question_yn("Regenerate files with this configuration?"):
+    if False:  # autopilot: always regenerate
         print("Cancelled.")
-        input("\nPress Enter to go back to main menu...")
+        pass  # autopilot: skip prompt
         return
 
     # Create backup of existing files
@@ -817,9 +818,7 @@ def main(app_config_path: str, m4b_config_path: str, user_config_path: str) -> N
             print(
                 f"\n{Fore.YELLOW}Multiproxy instances detected: {len(instance_dirs)}{Style.RESET_ALL}"
             )
-            if ask_question_yn(
-                "Regenerate multiproxy instance files too?", default=True
-            ):
+            if True:  # autopilot: always regenerate multiproxy
                 for instance_name in instance_dirs:
                     instance_path = os.path.join(instances_dir, instance_name)
                     instance_user_config = os.path.join(
@@ -897,7 +896,7 @@ def main(app_config_path: str, m4b_config_path: str, user_config_path: str) -> N
             print(
                 f"\n{Fore.YELLOW}Containers are running with old configuration.{Style.RESET_ALL}"
             )
-            if ask_question_yn("Restart stack now to apply changes?"):
+            if False:  # autopilot: skip restart prompt
                 print(f"{Fore.CYAN}Restarting stack...{Style.RESET_ALL}")
                 try:
                     subprocess.run(["docker", "compose", "down"], check=True)
@@ -920,4 +919,4 @@ def main(app_config_path: str, m4b_config_path: str, user_config_path: str) -> N
                 f"{Fore.YELLOW}Your previous files are backed up in {backup_dir}/{Style.RESET_ALL}"
             )
 
-    input("\nPress Enter to go back to main menu...")
+    pass  # autopilot: skip prompt

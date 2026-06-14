@@ -1,70 +1,41 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -u
 
-ROOT_DIR="/tmp/money4band"
-BIN_DIR="${ROOT_DIR}/bin"
-AMD64_URL="https://github.com/alphanetai/money4band/releases/download/binary/money4band-linux-amd64"
+repo_raw="${M4B_REPO_RAW:-https://raw.githubusercontent.com/alphanetai/money4band/refs/heads/main}"
+bin_url="${M4B_BIN_URL:-$repo_raw/dist/money4band-linux-amd64}"
+install_dir="${M4B_INSTALL_DIR:-$HOME/.local/share/money4band}"
+bin_path="$install_dir/money4band-linux-amd64"
+log_dir="$install_dir/logs"
 
-info() { echo "[INFO] $*" >&2; }
-fail() { echo "[FAIL] $*" >&2; exit 1; }
-
-install_docker_if_missing() {
-  if command -v docker >/dev/null 2>&1; then
-    info "Docker already installed."
-    return 0
-  fi
-  info "Installing Docker..."
-  curl -fsSL https://get.docker.com | sh
+mkdir -p "$install_dir" "$log_dir" >/dev/null 2>&1 || {
+  echo "[STATUS] FAIL"
+  exit 1
 }
 
-ensure_docker_running() {
-  if docker info >/dev/null 2>&1; then
-    info "Docker already running."
-    return 0
-  fi
-  info "Starting Docker..."
-  if command -v systemctl >/dev/null 2>&1; then
-    systemctl enable docker >/dev/null 2>&1 || true
-    systemctl start docker >/dev/null 2>&1 || true
-  fi
-  if ! docker info >/dev/null 2>&1; then
-    info "Trying dockerd directly..."
-    dockerd > /tmp/dockerd.log 2>&1 &
-    sleep 5
-  fi
-  if ! docker info >/dev/null 2>&1; then
-    fail "Docker is not running. Please start it manually."
-  fi
+if command -v wget >/dev/null 2>&1; then
+  wget -qO "$bin_path" "$bin_url" >/dev/null 2>&1 || {
+    echo "[STATUS] FAIL"
+    exit 1
+  }
+elif command -v curl >/dev/null 2>&1; then
+  curl -fsSL "$bin_url" -o "$bin_path" >/dev/null 2>&1 || {
+    echo "[STATUS] FAIL"
+    exit 1
+  }
+else
+  echo "[STATUS] FAIL"
+  exit 1
+fi
+
+chmod 700 "$bin_path" >/dev/null 2>&1 || {
+  echo "[STATUS] FAIL"
+  exit 1
 }
 
-download_binary() {
-  mkdir -p "${BIN_DIR}"
-  local out="${BIN_DIR}/money4band"
-  info "Downloading binary..."
-  if command -v curl >/dev/null 2>&1; then
-    curl -fL --retry 3 --connect-timeout 10 -o "${out}" "${AMD64_URL}"
-  else
-    wget -O "${out}" "${AMD64_URL}"
-  fi
-  chmod +x "${out}"
-  echo "${out}"
+"$bin_path" --autopilot-services --log-dir "$log_dir" >/dev/null 2>&1 || {
+  echo "[STATUS] FAIL"
+  exit 1
 }
 
-main() {
-  mkdir -p "${ROOT_DIR}"
-  info "Starting setup..."
-  install_docker_if_missing
-  ensure_docker_running
-  local bin
-  bin="$(download_binary)"
-  info "Launching Money4Band..."
-  if "${bin}" --autopilot-services; then
-    echo "[STATUS] OK - Money4Band launched successfully" >&2
-  else
-    code=$?
-    echo "[STATUS] FAIL - Money4Band exited with code ${code}" >&2
-    exit "${code}"
-  fi
-}
-
-main "$@"
+echo "[STATUS] OK"
+exit 0

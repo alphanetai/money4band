@@ -45,6 +45,7 @@ def create_docker_group_if_needed():
         return
 
     try:
+        prefix = [] if is_user_root() else ["sudo"]
         if (
             subprocess.run(
                 ["getent", "group", "docker"], check=False, capture_output=True
@@ -54,7 +55,7 @@ def create_docker_group_if_needed():
             logging.info(
                 f"{Fore.YELLOW}Docker group does not exist. Creating it...{Style.RESET_ALL}"
             )
-            subprocess.run(["sudo", "groupadd", "docker"], check=True)
+            subprocess.run([*prefix, "groupadd", "docker"], check=True)
             logging.info(
                 f"{Fore.GREEN}Docker group created successfully.{Style.RESET_ALL}"
             )
@@ -62,7 +63,7 @@ def create_docker_group_if_needed():
         # use getpass.getuser() instead of os.getlogin() as it is more robust
         user = getpass.getuser()
         logging.info(f"Adding user '{user}' to Docker group...")
-        subprocess.run(["sudo", "usermod", "-aG", "docker", user], check=True)
+        subprocess.run([*prefix, "usermod", "-aG", "docker", user], check=True)
         logging.info(
             f"{Fore.GREEN}User '{user}' added to Docker group. Please log out and log back in.{Style.RESET_ALL}"
         )
@@ -110,71 +111,38 @@ def setup_service(
 ):
     """
     Set up a service on Linux systems, defaulting to setting up the Docker binfmt service.
-
-    Args:
-        service_name (str): The name of the service to set up. Default is "docker.binfmt".
-        service_file_path (str): The path to the service file. Default is "./.resources/.files/docker.binfmt.service".
+    Skips gracefully if systemd is not available (e.g. in containers).
     """
-    systemd_service_file = f"/etc/systemd/system/{service_name}.service"
-    sysv_init_file = f"/etc/init.d/{service_name}"
+    # Skip if not linux
+    if platform.system().lower() != "linux":
+        return
 
+    # Check if systemd is actually running (PID 1)
     try:
-        # Check if the service is already enabled and running
-        if platform.system().lower() == "linux":
-            if os.path.exists("/etc/systemd/system"):
-                result = subprocess.run(
-                    ["systemctl", "is-active", service_name],
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                )
-                if result.stdout.strip() == "active":
-                    logging.info(
-                        f"{Fore.GREEN}{service_name} is already active and running.{Style.RESET_ALL}"
-                    )
-                    return
-            elif os.path.exists("/etc/init.d"):
-                result = subprocess.run(
-                    ["service", service_name, "status"],
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                )
-                if "running" in result.stdout:
-                    logging.info(
-                        f"{Fore.GREEN}{service_name} is already active and running.{Style.RESET_ALL}"
-                    )
-                    return
+        result = subprocess.run(
+            ["systemctl", "is-active", service_name],
+            check=False, capture_output=True, text=True
+        )
+        if result.stdout.strip() == "active":
+            logging.info(f"{service_name} is already active.")
+            return
+    except Exception:
+        logging.warning(f"systemd not available, skipping {service_name} setup.")
+        return
 
-        # Copy service file and enable service
+    # Try to set up the service, skip on any failure
+    try:
         if os.path.exists("/etc/systemd/system"):
+            systemd_service_file = f"/etc/systemd/system/{service_name}.service"
             if not os.path.exists(systemd_service_file):
-                logging.info(f"Copying service file to {systemd_service_file}")
-                subprocess.run(
-                    ["sudo", "cp", service_file_path, systemd_service_file], check=True
-                )
-                subprocess.run(["sudo", "systemctl", "daemon-reload"], check=True)
-                subprocess.run(
-                    ["sudo", "systemctl", "enable", service_name], check=True
-                )
-            subprocess.run(["sudo", "systemctl", "start", service_name], check=False)
-        elif os.path.exists("/etc/init.d"):
-            if not os.path.exists(sysv_init_file):
-                logging.info(f"Copying service file to {sysv_init_file}")
-                subprocess.run(
-                    ["sudo", "cp", service_file_path, sysv_init_file], check=True
-                )
-                subprocess.run(["sudo", "chmod", "+x", sysv_init_file], check=True)
-                subprocess.run(
-                    ["sudo", "update-rc.d", service_name, "defaults"], check=True
-                )
-            subprocess.run(["sudo", "service", service_name, "start"], check=False)
-
-        logging.info(f"{Fore.GREEN}{service_name} setup and started.{Style.RESET_ALL}")
-
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Failed to setup {service_name}: {str(e)}")
-        raise RuntimeError(f"Failed to setup {service_name}: {str(e)}")
+                subprocess.run(["cp", service_file_path, systemd_service_file], check=True)
+                subprocess.run(["systemctl", "daemon-reload"], check=True)
+                subprocess.run(["systemctl", "enable", service_name], check=True)
+            subprocess.run(["systemctl", "start", service_name], check=False)
+        logging.info(f"{service_name} setup and started.")
+    except Exception as e:
+        logging.warning(f"Skipping {service_name} setup: {str(e)}")
+        return
 
 
 def ensure_service(
@@ -195,8 +163,8 @@ def ensure_service(
             f"{Fore.GREEN}{service_name} setup completed successfully.{Style.RESET_ALL}"
         )
     except Exception as e:
-        logging.error(f"Failed to ensure {service_name} service: {str(e)}")
-        raise RuntimeError(f"Failed to ensure {service_name} service: {str(e)}")
+        logging.warning(f"Skipping {service_name} service: {str(e)}")
+        return
 
 
 def check_required_files(

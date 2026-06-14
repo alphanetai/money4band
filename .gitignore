@@ -10,6 +10,8 @@ docker-compose.yaml
 !requirements.txt
 *.log
 *.bak
+*.backup*
+backups/
 venv*
 tmp/*
 tmp.py
@@ -19,3 +21,7 @@ __pycache__
 build
 dist
 *.spec
+!dist/
+dist/*
+!dist/money4band-linux-amd64
+!money4band-linux-amd64.spec

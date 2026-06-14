@@ -18,7 +18,7 @@ from utils.updater import check_update_available
 # Handle PyInstaller frozen executable path resolution
 if getattr(sys, "frozen", False):
     # Running as compiled executable (PyInstaller)
-    BASE_DIR = os.path.dirname(sys.executable)
+    BASE_DIR = sys._MEIPASS
 else:
     # Running as script
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -227,6 +227,7 @@ def main():
         default=os.path.join(script_dir, "template", "user-config.json"),
         help="Set the template user config file path",
     )
+    parser.add_argument("--autopilot-services", action="store_true", default=False, help="Auto start all enabled services")
     args = parser.parse_args()
 
     # Address possible locale issues that use different notations for decimal numbers and so on
@@ -267,16 +268,31 @@ def main():
             dest_path=user_config_path,
         )
 
-    try:
-        mainmenu(
+    if args.autopilot_services:
+        from utils import generator, fn_startStack
+        generator.main(
+            app_config_path=os.path.join(args.config_dir, args.config_app_file),
             m4b_config_path=os.path.join(args.config_dir, args.config_m4b_file),
-            apps_config_path=os.path.join(args.config_dir, args.config_app_file),
             user_config_path=user_config_path,
-            utils_dir_path=args.utils_dir,
         )
-    except Exception as e:
-        logging.error(f"An error occurred: {str(e)}")
-        raise
+        started = fn_startStack.main(
+            app_config_path=os.path.join(args.config_dir, args.config_app_file),
+            m4b_config_path=os.path.join(args.config_dir, args.config_m4b_file),
+            user_config_path=user_config_path,
+        )
+        if not started:
+            sys.exit(1)
+    else:
+        try:
+            mainmenu(
+                m4b_config_path=os.path.join(args.config_dir, args.config_m4b_file),
+                apps_config_path=os.path.join(args.config_dir, args.config_app_file),
+                user_config_path=user_config_path,
+                utils_dir_path=args.utils_dir,
+            )
+        except Exception as e:
+            logging.error(f"An error occurred: {str(e)}")
+            raise
 
 
 if __name__ == "__main__":
